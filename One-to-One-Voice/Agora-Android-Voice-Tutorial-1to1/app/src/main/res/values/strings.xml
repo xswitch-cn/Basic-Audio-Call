@@ -1,13 +1,29 @@
 <resources>
-    <string name="app_name">Agora-Android-Voice-Tutorial</string>
+    <string name="app_name">AgoraXSwitch</string>
 
-    <!-- PLEASE KEEP THIS App ID IN SAFE PLACE -->
+    <!-- PLEASE KEEP THIS App ID IN SAFE PLACE Agora-Android-Voice-Tutorial-->
     <!-- Get your own App ID at https://dashboard.agora.io/ -->
     <!-- After you entered the App ID, remove <##> outside of Your App ID -->
     <!-- For formal released project, please use Security Keys/Token
         https://docs.agora.io/en/Agora%20Platform/token?platform=All%20Platforms -->
-    <string name="agora_app_id"><#YOUR APP ID#></string>
+    <string name="agora_app_id">#YOUR APP ID#</string>
     <!-- Please leave it if not enable App Certificate -->
     <!-- You can generate a temporary token at https://dashboard.agora.io/projects -->
     <string name="agora_access_token">#YOUR ACCESS TOKEN#</string>
+    <string name="app_id_string">APP ID</string>
+    <string name="token_string">Token(optional)</string>
+    <string name="channel_string">Channel name</string>
+    <string name="user_id_string">User ID(optional)</string>
+    <string name="join_string">Join</string>
+    <string name="leave_string">Leave</string>
+    <string name="login_name_string">XSwitch login name</string>
+    <string name="password_string">Password</string>
+    <string name="domain_string">Domain</string>
+    <string name="dest_number_string">Sip number</string>
+    <string name="login_string">Get token</string>
+    <string name="call_string">Call</string>
+    <string name="hang_up_string">Hang Up</string>
+    <string name="current_user">Current user --- uid : %s</string>
+    <string name="remote_user">Remote user --- uid : %s</string>
+    <string name="use_tip">1. Click the “JOIN” button to join the voice network channel and use more parameters.\n2. After joining, you can make XSwitch calls.\n3. Join the experience as soon as possible.</string>
 </resources>
