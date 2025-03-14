@@ -1,21 +1,22 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 28
-
+    compileSdkVersion 35
+    namespace "io.agora.tutorials1v1acall"
     defaultConfig {
         applicationId "io.agora.tutorials1v1acall"
-        minSdkVersion 16 // JELLY_BEAN
-        targetSdkVersion 28
+        minSdkVersion 35 // JELLY_BEAN
+        targetSdkVersion 35
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        ndk.abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 
     buildTypes {
@@ -27,6 +28,10 @@ android {
 
     lintOptions {
         warning 'InvalidPackage'
+    }
+    applicationVariants.all { variant ->
+        // variant.outputs.all { outputFileName = "${variant.name}-${defaultConfig.versionName}-${buildType.name}.apk" }
+        variant.outputs.all { outputFileName = "Agora-XSwitch-demo.apk" }
     }
 }
 

@@ -1,6 +1,10 @@
 package io.agora.tutorials1v1acall;
 
+import static android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
+
 import android.Manifest;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.PorterDuff;
 import android.os.Bundle;
@@ -11,16 +15,67 @@ import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowInsetsController;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.Locale;
 
-import io.agora.rtc.Constants;
-import io.agora.rtc.IRtcEngineEventHandler;
-import io.agora.rtc.RtcEngine;
+import io.agora.rtc2.Constants;
+import io.agora.rtc2.IRtcEngineEventHandler;
+import io.agora.rtc2.RtcEngine;
 
-public class VoiceChatViewActivity extends AppCompatActivity {
+public class VoiceChatViewActivity extends AppCompatActivity implements HttpConnectionTask.TaskCallback {
+    private EditText mAppIdEditText;
+
+    private EditText mTokenEditText;
+
+    private EditText mChannelEditText;
+
+    private EditText mUserIdEditText;
+
+    private View mLoginView;
+
+    private View mCallingView;
+
+    private static final String DEFAULT_CHANNEL = "voiceDemoChannel1";
+
+    private String appId;
+
+    private String token = null;
+
+    private String channel;
+
+    private int userId;
+
+    private TextView mCurrentUserTextView;
+
+    private TextView mRemoteUserTextView;
+
+    private View mXSwitchLoginView;
+
+    private EditText mXSwitchLoginNameEditText;
+
+    private EditText mXSwitchPasswordEditText;
+
+    private EditText mXSwitchDomainEditText;
+
+    private EditText mSipNumberEditText;
+
+    private TextView mXSwitchTokenView;
+
+    private Button mXSwitchCallButton;
+
+    private Button mXSwitchHangUpButton;
+
+    private String mCallData;
 
     private static final String LOG_TAG = VoiceChatViewActivity.class.getSimpleName();
 
@@ -75,6 +130,40 @@ public class VoiceChatViewActivity extends AppCompatActivity {
                 }
             });
         }
+
+        @Override
+        public void onJoinChannelSuccess(String channel, int uid, int elapsed) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    mLoginView.setVisibility(View.GONE);
+                    mCallingView.setVisibility(View.VISIBLE);
+                    mXSwitchLoginView.setVisibility(View.VISIBLE);
+                    mCurrentUserTextView.setText(getString(R.string.current_user, String.valueOf(uid)));
+                    showLongToast("onJoinChannelSuccess: Join success");
+                }
+            });
+        }
+
+        @Override
+        public void onUserJoined(int uid, int elapsed) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    mRemoteUserTextView.setText(getString(R.string.remote_user, String.valueOf(uid)));
+                }
+            });
+        }
+
+        @Override
+        public void onLicenseValidationFailure(int error) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    showLongToast("onLicenseValidationFailure");
+                }
+            });
+        }
     };
 
     @Override
@@ -83,7 +172,13 @@ public class VoiceChatViewActivity extends AppCompatActivity {
         setContentView(R.layout.activity_voice_chat_view);
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO, PERMISSION_REQ_ID_RECORD_AUDIO)) {
-            initAgoraEngineAndJoinChannel();
+            //initAgoraEngineAndJoinChannel();
+        }
+        initView();
+        Window window = getWindow();
+        WindowInsetsController controller = window.getInsetsController();
+        if (controller != null) {
+            controller.setSystemBarsAppearance(APPEARANCE_LIGHT_STATUS_BARS, APPEARANCE_LIGHT_STATUS_BARS); // 设置为深色图标
         }
     }
 
@@ -115,7 +210,7 @@ public class VoiceChatViewActivity extends AppCompatActivity {
             case PERMISSION_REQ_ID_RECORD_AUDIO: {
                 if (grantResults.length > 0
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    initAgoraEngineAndJoinChannel();
+                    // initAgoraEngineAndJoinChannel();
                 } else {
                     showLongToast("No permission for " + Manifest.permission.RECORD_AUDIO);
                     finish();
@@ -138,8 +233,10 @@ public class VoiceChatViewActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
 
-        leaveChannel();
-        RtcEngine.destroy();
+        if (mRtcEngine != null) {
+            leaveChannel();
+            RtcEngine.destroy();
+        }
         mRtcEngine = null;
     }
 
@@ -177,26 +274,38 @@ public class VoiceChatViewActivity extends AppCompatActivity {
 
     // Tutorial Step 3
     public void onEncCallClicked(View view) {
-        finish();
+        if (mRtcEngine != null) {
+            leaveChannel();
+            RtcEngine.destroy();
+            mRtcEngine = null;
+        }
+        mLoginView.setVisibility(View.VISIBLE);
+        mXSwitchLoginView.setVisibility(View.GONE);
+        mCallingView.setVisibility(View.GONE);
+        // finish();
     }
 
     // Tutorial Step 1
     private void initializeAgoraEngine() {
         try {
-            mRtcEngine = RtcEngine.create(getBaseContext(), getString(R.string.agora_app_id), mRtcEventHandler);            
+            mRtcEngine = RtcEngine.create(getBaseContext(), appId, mRtcEventHandler);
         } catch (Exception e) {
             Log.e(LOG_TAG, Log.getStackTraceString(e));
 
-            throw new RuntimeException("NEED TO check rtc sdk init fatal error\n" + Log.getStackTraceString(e));
+            //throw new RuntimeException("NEED TO check rtc sdk init fatal error\n" + Log.getStackTraceString(e));
+            showLongToast("Join fail! Reason: " + e.getMessage());
         }
     }
 
     // Tutorial Step 2
     private void joinChannel() {
-        String accessToken = getString(R.string.agora_access_token);
-        if (TextUtils.equals(accessToken, "") || TextUtils.equals(accessToken, "#YOUR ACCESS TOKEN#")) {
-            accessToken = null; // default, no token
+        if (mRtcEngine == null) {
+            return;
         }
+//        String accessToken = getString(R.string.agora_access_token);
+//        if (TextUtils.equals(accessToken, "") || TextUtils.equals(accessToken, "#YOUR ACCESS TOKEN#")) {
+//            accessToken = null; // default, no token
+//        }
         
         // Sets the channel profile of the Agora RtcEngine.
         // CHANNEL_PROFILE_COMMUNICATION(0): (Default) The Communication profile. Use this profile in one-on-one calls or group calls, where all users can talk freely.
@@ -204,7 +313,11 @@ public class VoiceChatViewActivity extends AppCompatActivity {
         mRtcEngine.setChannelProfile(Constants.CHANNEL_PROFILE_COMMUNICATION);
 
         // Allows a user to join a channel.
-        mRtcEngine.joinChannel(accessToken, "voiceDemoChannel1", "Extra Optional Data", 0); // if you do not specify the uid, we will generate the uid for you
+        int result = mRtcEngine.joinChannel(token, channel, "Extra Optional Data", userId); // if you do not specify the uid, we will generate the uid for you
+        if (result != 0) {
+            showLongToast("Join error: token or channel is invalid");
+            mRtcEngine.leaveChannel();
+        }
     }
 
     // Tutorial Step 3
@@ -217,10 +330,231 @@ public class VoiceChatViewActivity extends AppCompatActivity {
         showLongToast(String.format(Locale.US, "user %d left %d", (uid & 0xFFFFFFFFL), reason));
         View tipMsg = findViewById(R.id.quick_tips_when_use_agora_sdk); // optional UI
         tipMsg.setVisibility(View.VISIBLE);
+        mXSwitchHangUpButton.setEnabled(false);
+        mRemoteUserTextView.setText(getString(R.string.remote_user, "no remote user joined"));
+        if (!TextUtils.isEmpty(mXSwitchTokenView.getText().toString())) {
+            mXSwitchCallButton.setEnabled(true);
+        }
     }
 
     // Tutorial Step 6
     private void onRemoteUserVoiceMuted(int uid, boolean muted) {
         showLongToast(String.format(Locale.US, "user %d muted or unmuted %b", (uid & 0xFFFFFFFFL), muted));
+    }
+
+    // Extended
+    @Override
+    protected void onResume() {
+        super.onResume();
+        restoreUserData();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        saveUserData();
+    }
+
+    private void saveUserData() {
+        // 获取SharedPreferences对象
+        SharedPreferences sharedPreferences = getSharedPreferences(CommonConstant.PREFERENCE_NAME, Context.MODE_PRIVATE);
+        // 获取Editor对象
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+
+        // 保存数据
+        editor.putString(CommonConstant.APP_ID, mAppIdEditText.getText().toString()); // 保存字符串
+        editor.putString(CommonConstant.TOKEN, mTokenEditText.getText().toString());
+        editor.putString(CommonConstant.CHANNEL, mChannelEditText.getText().toString());
+        editor.putString(CommonConstant.USER_ID, mUserIdEditText.getText().toString());
+
+        editor.putString(CommonConstant.X_SWITCH_LOGIN_NAME, mXSwitchLoginNameEditText.getText().toString()); // 保存字符串
+        editor.putString(CommonConstant.X_SWITCH_PASSWORD, mXSwitchPasswordEditText.getText().toString());
+        editor.putString(CommonConstant.X_SWITCH_DOMAIN, mXSwitchDomainEditText.getText().toString());
+        // editor.putString(CommonConstant.X_SWITCH_TOKEN, mXSwitchTokenView.getText().toString());
+        editor.putString(CommonConstant.X_SWITCH_SIP_NUMBER, mSipNumberEditText.getText().toString());
+
+        // 提交更改
+        editor.apply(); // 或者 editor.commit(); 但apply是异步的，通常更快
+    }
+
+    private void restoreUserData() {
+        // 获取SharedPreferences对象
+        SharedPreferences sharedPreferences = getSharedPreferences(CommonConstant.PREFERENCE_NAME, Context.MODE_PRIVATE);
+
+        // 读取数据
+        String appId = sharedPreferences.getString(CommonConstant.APP_ID, "");
+        String token = sharedPreferences.getString(CommonConstant.TOKEN, "");
+        String channel = sharedPreferences.getString(CommonConstant.CHANNEL, "");
+        String user_id = sharedPreferences.getString(CommonConstant.USER_ID, "");
+
+        String xSwitchLoginName = sharedPreferences.getString(CommonConstant.X_SWITCH_LOGIN_NAME, "");
+        String xSwitchPassword = sharedPreferences.getString(CommonConstant.X_SWITCH_PASSWORD, "");
+        String xSwitchDomain = sharedPreferences.getString(CommonConstant.X_SWITCH_DOMAIN, "");
+        // String xSwitchToken = sharedPreferences.getString(CommonConstant.X_SWITCH_TOKEN, "");
+        String xSwitchSipNumber = sharedPreferences.getString(CommonConstant.X_SWITCH_SIP_NUMBER, "");
+        mAppIdEditText.setText(appId);
+        mTokenEditText.setText(token);
+        mChannelEditText.setText(channel);
+        mUserIdEditText.setText(user_id);
+        mXSwitchLoginNameEditText.setText(xSwitchLoginName);
+        mXSwitchPasswordEditText.setText(xSwitchPassword);
+        mXSwitchDomainEditText.setText(xSwitchDomain);
+        // mXSwitchTokenView.setText(xSwitchToken);
+        mSipNumberEditText.setText(xSwitchSipNumber);
+    }
+
+    private void initView() {
+        mAppIdEditText = findViewById(R.id.app_id_edit);
+        mTokenEditText = findViewById(R.id.token_edit);
+        mChannelEditText = findViewById(R.id.channel_edit);
+        mUserIdEditText = findViewById(R.id.user_id_edit);
+        mLoginView = findViewById(R.id.loginView);
+        mCallingView = findViewById(R.id.callingView);
+        mCurrentUserTextView = findViewById(R.id.current_user);
+        mRemoteUserTextView = findViewById(R.id.remote_user);
+        mRemoteUserTextView.setText(getString(R.string.remote_user, "no remote user joined"));
+        mXSwitchLoginView = findViewById(R.id.xSwitchLoginView);
+        mXSwitchLoginNameEditText = findViewById(R.id.login);
+        mXSwitchPasswordEditText = findViewById(R.id.password);
+        mXSwitchDomainEditText = findViewById(R.id.domain);
+        mSipNumberEditText = findViewById(R.id.sipNumber);
+        mXSwitchTokenView = findViewById(R.id.token_text);
+        mXSwitchCallButton = findViewById(R.id.xSwitchCallButton);
+        mXSwitchHangUpButton = findViewById(R.id.xSwitchHangUpButton);
+    }
+
+    public void onJoinButtonClicked(View view) {
+        appId = (mAppIdEditText.getText() != null) ? mAppIdEditText.getText().toString() : "";
+        token = (mTokenEditText.getText() != null) ? mTokenEditText.getText().toString() : null;
+        channel = (mChannelEditText.getText() != null) ? mChannelEditText.getText().toString() : DEFAULT_CHANNEL;
+        if (mUserIdEditText.getText() != null) {
+            try {
+                userId = Integer.parseInt(mUserIdEditText.getText().toString());
+            } catch (NumberFormatException e) {
+                userId = 0;
+            }
+        }
+        if (TextUtils.isEmpty(appId)) {
+            showLongToast("APP ID must not be null!");
+            return;
+        }
+        if (!checkSelfPermission(Manifest.permission.RECORD_AUDIO, PERMISSION_REQ_ID_RECORD_AUDIO)) {
+            return;
+        }
+        initAgoraEngineAndJoinChannel();
+    }
+
+    public void onLeaveButtonClicked(View view) {
+        if (mRtcEngine != null) {
+            leaveChannel();
+            RtcEngine.destroy();
+            mRtcEngine = null;
+        }
+    }
+
+    public void onLoginButtonClicked(View view) {
+        String login = mXSwitchLoginNameEditText.getText().toString();
+        String password = mXSwitchPasswordEditText.getText().toString();
+        String domain = mXSwitchDomainEditText.getText().toString();
+        if (TextUtils.isEmpty(login) || TextUtils.isEmpty(password) || TextUtils.isEmpty(domain)) {
+            Log.i(LOG_TAG, "invalid parameter: login or password or domain is empty!");
+            showLongToast("invalid parameter: login or password or domain is empty!");
+            return;
+        }
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("login", login);
+            jsonObject.put("password", password);
+            jsonObject.put("domain", domain);
+        } catch (JSONException e) {
+            Log.e(LOG_TAG, "onLoginButtonClicked" + e.getMessage());
+        }
+        HttpConnectionTask httpConnectionTask = new HttpConnectionTask(jsonObject.toString(), this);
+        httpConnectionTask.execute(CommonConstant.GET_TOKEN_URL);
+    }
+
+    public void onCallButtonClicked(View view) {
+        String token = mTokenEditText.getText().toString();
+        String channel = mChannelEditText.getText().toString();
+        String sipNumber = mSipNumberEditText.getText().toString();
+        String domain = mXSwitchDomainEditText.getText().toString();
+        if (TextUtils.isEmpty(sipNumber) || TextUtils.isEmpty(domain)) {
+            Log.i(LOG_TAG, "invalid parameter: sipNumber or domain is empty!");
+            showLongToast("invalid parameter: sipNumber or domain is empty!");
+            return;
+        }
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("destNumber", sipNumber);
+            jsonObject.put("token", token);
+            jsonObject.put("channel", channel);
+            jsonObject.put("domain", domain);
+        } catch (JSONException e) {
+            Log.e(LOG_TAG, "onCallButtonClicked" + e.getMessage());
+        }
+        HttpConnectionTask httpConnectionTask = new HttpConnectionTask(jsonObject.toString(), this);
+        httpConnectionTask.setAuthorization(mXSwitchTokenView.getText().toString());
+        httpConnectionTask.execute(CommonConstant.CALL_PSTN_URL);
+    }
+
+    public void onHangUpButtonClicked(View view) {
+        if (TextUtils.isEmpty(mCallData)) {
+            showLongToast("No sip call is running!");
+            return;
+        }
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("hangup_cause", "NORMAL_CLEARING");
+        } catch (JSONException e) {
+            Log.e(LOG_TAG, "onHangUpButtonClicked" + e.getMessage());
+        }
+        HttpConnectionTask httpConnectionTask = new HttpConnectionTask(jsonObject.toString(), this);
+        httpConnectionTask.setAuthorization(mXSwitchTokenView.getText().toString());
+        httpConnectionTask.setCallData(mCallData);
+        httpConnectionTask.execute(CommonConstant.CALL_HANG_UP_URL);
+    }
+
+    @Override
+    public void onRequestReturn(String url, String result) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                switch(url) {
+                    case CommonConstant.GET_TOKEN_URL: {
+                        try {
+                            JSONObject jsonObject = new JSONObject(result);
+                            mXSwitchTokenView.setText(jsonObject.getString("token"));
+                            mXSwitchCallButton.setEnabled(true);
+                            showLongToast("XSwitch login successful!");
+                        } catch (JSONException e) {
+                            //throw new RuntimeException(e);
+                            e.printStackTrace();
+                            showLongToast(result);
+                        }
+                        break;
+                    }
+                    case CommonConstant.CALL_PSTN_URL: {
+                        try {
+                            JSONObject jsonObject = new JSONObject(result);
+                            mCallData = jsonObject.getString("data");
+                            mXSwitchHangUpButton.setEnabled(true);
+                            mXSwitchCallButton.setEnabled(false);
+                            showLongToast("Call successful!");
+                        } catch (JSONException e) {
+                            //throw new RuntimeException(e);
+                            e.printStackTrace();
+                            showLongToast(result);
+                        }
+                        break;
+                    }
+                    case CommonConstant.CALL_HANG_UP_URL:
+                        break;
+                    default: {
+                        showLongToast(result);
+                        break;
+                    }
+                }
+            }
+        });
     }
 }
